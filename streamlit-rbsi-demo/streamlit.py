@@ -17,13 +17,19 @@ def chunk_df(df, account, transaction_type):
     dt_chunk=dt_chunk.drop(['Unnamed: 0'], axis=1).sort_values('Date').reset_index(drop=True)
     return dt_chunk
 
-def monthly_filter(df):
+def monthly_overview(df):
     df['Date'] = pd.to_datetime(df['Date'])
     df['Month'] = df['Date'].apply(lambda x: calendar.month_name[x.month])
     monthly_df = df.groupby('Month').sum().reset_index(drop=False)
     monthly_df['Month_number'] = monthly_df['Month'].apply(lambda x: months[x])
     monthly_df.sort_values('Month_number',inplace=True)
     return monthly_df
+
+def month_insights(df,month_selected):
+    df['Date'] = pd.to_datetime(df['Date'])
+    df_month = df[df['Date'].dt.month==months[month_selected]]
+    return df_month
+
 
 df = get_data()
 
@@ -41,11 +47,11 @@ def main() -> None:
         'Account:',
         tuple(df['Account'].unique())
     )
-    month = st.sidebar.selectbox('Month:', tuple(months.keys()))
+    month = st.sidebar.selectbox('Month Breakdown:', tuple(months.keys()))
 
     #Filter DataFrame
     dt_chunk = chunk_df(df, account_name, transaction_type)
-    monthly_df = monthly_filter(dt_chunk)
+    monthly_df = monthly_overview(dt_chunk)
 
 
     #Raw View and Metrics
@@ -96,6 +102,35 @@ def main() -> None:
                      "Amount": "Amount (£)",
                      "Month": "Month"})
     st.plotly_chart(monthly_fig, use_container_width=True)
+
+    st.subheader(f'Deeper look into {month}')
+    df_month = month_insights(dt_chunk, month)
+
+    num_transactions, avg_spend, max_spend = st.columns(3)
+    num_transactions.metric(
+            f"Number of Transactions",
+            f"{len(df_month)}"
+        )
+    avg_spend.metric(
+            f"Average spend in {month}",
+            f"£{np.round(df_month['Amount'].mean(),2)}")
+    max_spend.metric(
+            f"Most expensive transaction",
+            f"£{np.round(df_month['Amount'].max(),2)}"
+        )
+
+        #Raw View and Metrics
+    with st.expander(f"{month} Dataframe"):
+        st.write(df_month)
+
+    #Plot Month Graph
+    fig_month = px.line(df_month,
+                  x="Date",
+                  y="Amount",
+                  title=f"{month} Spending of {transaction_type} for Account {account_name}")
+
+    fig_month.update_traces(line=dict(width=4))
+    st.plotly_chart(fig_month, use_container_width=True)
 
 if __name__ == "__main__":
     main()
